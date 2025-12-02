@@ -15,5 +15,6 @@ func AuthRoutes(r *gin.Engine, pg *pgxpool.Pool) {
 		auth.POST("/register", authController.Register)
 		auth.POST("/login", authController.Login)
 		auth.POST("/logout", authController.Logout)
+		auth.POST("/refresh", authController.RefreshToken)
 	}
 }
