@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS shortlinks;
+
+DROP TABLE IF EXISTS sessions;
