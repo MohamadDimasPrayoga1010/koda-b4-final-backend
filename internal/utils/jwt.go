@@ -24,15 +24,51 @@ func GenerateToken(id int, email, role string) (string, error) {
 		Email: email,
 		Role:  role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "coffeeshop",
+			Issuer:    "kodashortlink",
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secretKey))
 }
+
+func GenerateRefreshToken(id int, email, role string) (string, error) {
+	secretKey := os.Getenv("JWT_REFRESH_SECRET")
+	claims := &UserPayload{
+		Id:    id,
+		Email: email,
+		Role:  role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), 
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "kodashortlink",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secretKey))
+}
+
+func VerifyRefreshToken(tokenStr string) (*UserPayload, error) {
+	secretKey := os.Getenv("JWT_REFRESH_SECRET")
+	claims := &UserPayload{}
+
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrInvalidKeyType
+		}
+		return []byte(secretKey), nil
+	})
+
+	if err != nil || !token.Valid {
+		return nil, err
+	}
+
+	return claims, nil
+}
+
 
 func JWTMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
