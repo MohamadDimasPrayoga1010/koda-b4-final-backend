@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"koda-shortlink/internal/models"
 	"koda-shortlink/internal/utils"
 	"koda-shortlink/pkg/response"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,8 +19,6 @@ type ShortlinkController struct {
 type CreateShortlinkRequest struct {
 	OriginalURL string `json:"original_url" binding:"required,url"`
 }
-
-
 
 // @Summary Create a new shortlink
 // @Description Generate a shortlink for the provided URL
@@ -67,7 +68,6 @@ func (sc *ShortlinkController) CreateShortlink(ctx *gin.Context) {
 	})
 }
 
-
 // @Summary Get all shortlinks
 // @Description Retrieve a list of all shortlinks
 // @Tags Shortlinks
@@ -92,14 +92,13 @@ func (sc *ShortlinkController) GetAllShortlinks(ctx *gin.Context) {
 	})
 }
 
-
-// @Summary Get a shortlink by code
-// @Description Retrieve a shortlink by its short code and log the click
+// @Summary Redirect shortlink by code
+// @Description Redirects the user to the original URL based on the short code. Also logs the click and increments redirect count.
 // @Tags Shortlinks
 // @Accept json
 // @Produce json
 // @Param shortCode path string true "Shortlink code"
-// @Success 200 {object} response.Response "Returns the shortlink data"
+// @Success 302 {string} string "Redirects to the original URL"
 // @Failure 404 {object} response.Response "Shortlink not found"
 // @Failure 500 {object} response.Response "Internal server error"
 // @Router /api/v1/links/{shortCode} [get]
@@ -129,20 +128,9 @@ func (sc *ShortlinkController) GetShortlinkByCode(ctx *gin.Context) {
 		UserAgent:   ctx.Request.UserAgent(),
 	}
 	_ = models.LogClick(sc.DB, click)
-	ctx.JSON(200, response.Response{
-		Success: true,
-		Message: "Shortlink retrieved successfully",
-		Data: gin.H{
-			"id":            sl.ID,
-			"original_url":  sl.OriginalURL,
-			"short_code":    sl.ShortCode,
-			"redirect_count": sl.RedirectCount + 1, 
-			"created_at":    sl.CreatedAt,
-			"updated_at":    sl.UpdatedAt,
-		},
-	})
-}
 
+	ctx.Redirect(302, sl.OriginalURL)
+}
 
 type UpdateShortlinkRequest struct {
 	OriginalURL string `json:"original_url" binding:"required,url"`
@@ -264,4 +252,122 @@ func (sc *ShortlinkController) DeleteShortlink(ctx *gin.Context) {
 		Success: true,
 		Message: "Shortlink deleted successfully",
 	})
+}
+
+// @Summary Resolve shortlink to original URL
+// @Description Resolve shortlink: hit Redis first, then DB fallback.
+// @Description Click counter is incremented in Redis. Analytics logged asynchronously.
+// @Tags Redirect
+// @Produce json
+// @Param shortCode path string true "Short code"
+// @Success 200 {object} response.Response "Original URL returned successfully"
+// @Failure 404 {object} response.Response "Shortlink not found"
+// @Failure 500 {object} response.Response "Internal server error"
+// @Router /{shortCode} [get]
+func (sc *ShortlinkController) GetShortlinksRedis(ctx *gin.Context) {
+	shortCode := ctx.Param("shortCode")
+	rctx := context.Background()
+
+	destKey := "link:" + shortCode + ":destination"
+	clickKey := "link:" + shortCode + ":clicks"
+
+	var sl models.Shortlink
+
+	val, err := utils.RedisClient.Get(rctx, destKey).Result()
+	if err == nil {
+		_ = json.Unmarshal([]byte(val), &sl)
+	} else {
+		sl, err = models.GetShortlinkByCode(sc.DB, shortCode)
+		if err != nil {
+			ctx.JSON(404, response.Response{
+				Success: false,
+				Message: "Shortlink not found",
+			})
+			return
+		}
+
+		jsonData, _ := json.Marshal(sl)
+		utils.RedisClient.Set(rctx, destKey, jsonData, 24*time.Hour)
+	}
+	utils.RedisClient.Incr(rctx, clickKey)
+
+	ctx.JSON(200, response.Response{
+		Success: true,
+		Message: "Shortlink resolved",
+		Data: gin.H{
+			"original_url": sl.OriginalURL,
+		},
+	})
+
+	go models.IncrementRedirectCount(sc.DB, sl.ID)
+
+	go models.LogClick(sc.DB, models.ShortlinkClick{
+		ShortlinkID: sl.ID,
+		IP:          ctx.ClientIP(),
+		UserAgent:   ctx.Request.UserAgent(),
+	})
+}
+
+// GetDashboardStats godoc
+// @Summary Get dashboard statistics
+// @Description Retrieve overall shortlink statistics including total links, total visits, average click rate, visits growth, and last 7 days visitor chart
+// @Tags Dashboard
+// @Accept json
+// @Produce json
+// @Success 200 {object} response.Response{data=map[string]interface{}} "Returns dashboard statistics"
+// @Failure 500 {object} response.Response "Failed to retrieve dashboard stats"
+// @Router /api/v1/dashboard/stats [get]
+func (sc *ShortlinkController) GetDashboardStats(ctx *gin.Context) {
+	rctx := context.Background()
+	dashboardCacheKey := "analytics:global:7d"
+
+	val, err := utils.RedisClient.Get(rctx, dashboardCacheKey).Result()
+	if err == nil && val != "" {
+		var stats models.DashboardStats
+		if err := json.Unmarshal([]byte(val), &stats); err == nil {
+			ctx.JSON(200, response.Response{
+				Success: true,
+				Message: "Dashboard stats retrieved successfully (from cache)",
+				Data: gin.H{
+					"total_links":    stats.TotalLinks,
+					"total_visits":   stats.TotalVisits,
+					"avg_click_rate": stats.AvgClickRate,
+					"visits_growth":  stats.VisitsGrowth,
+					"last_7_days":    stats.Last7Days,
+				},
+			})
+			return
+		}
+	}
+
+	stats, err := models.GetDashboardStats(sc.DB)
+	if err != nil {
+		ctx.JSON(500, response.Response{
+			Success: false,
+			Message: "Failed to retrieve dashboard stats",
+		})
+		return
+	}
+
+	jsonData, _ := json.Marshal(stats)
+	utils.RedisClient.Set(rctx, dashboardCacheKey, jsonData, time.Hour)
+
+	for _, sl := range stats.Last7DaysShortlinks {
+		destKey := "link:" + sl.ShortCode + ":destination"
+		jsonSL, _ := json.Marshal(sl)
+		utils.RedisClient.Set(rctx, destKey, jsonSL, 24*time.Hour)
+	}
+
+	ctx.JSON(200, response.Response{
+		Success: true,
+		Message: "Dashboard stats retrieved successfully",
+		Data: gin.H{
+			"total_links":    stats.TotalLinks,
+			"total_visits":   stats.TotalVisits,
+			"avg_click_rate": stats.AvgClickRate,
+			"visits_growth":  stats.VisitsGrowth,
+			"last_7_days":    stats.Last7Days,
+		},
+	})
+
 }
