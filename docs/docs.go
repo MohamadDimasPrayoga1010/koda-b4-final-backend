@@ -269,7 +269,12 @@ const docTemplate = `{
         },
         "/api/v1/dashboard/stats": {
             "get": {
-                "description": "Retrieve overall shortlink statistics including total links, total visits, average click rate, visits growth, and last 7 days visitor chart",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve overall shortlink statistics for authenticated user",
                 "consumes": [
                     "application/json"
                 ],
@@ -300,6 +305,12 @@ const docTemplate = `{
                             ]
                         }
                     },
+                    "401": {
+                        "description": "User not authenticated",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
                     "500": {
                         "description": "Failed to retrieve dashboard stats",
                         "schema": {
@@ -311,7 +322,12 @@ const docTemplate = `{
         },
         "/api/v1/links": {
             "get": {
-                "description": "Retrieve a list of all shortlinks",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve a list of all shortlinks for authenticated user",
                 "produces": [
                     "application/json"
                 ],
@@ -326,6 +342,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Response"
                         }
                     },
+                    "401": {
+                        "description": "User not authenticated",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -335,7 +357,12 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Generate a shortlink for the provided URL",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Generate a shortlink for the provided URL (works with or without authentication)",
                 "consumes": [
                     "application/json"
                 ],
@@ -423,7 +450,12 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update original URL or generate/set new short code",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update original URL or generate/set new short code (requires authentication)",
                 "consumes": [
                     "application/json"
                 ],
@@ -465,6 +497,18 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Response"
                         }
                     },
+                    "401": {
+                        "description": "User not authenticated",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "No permission to update this link",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
                     "404": {
                         "description": "Shortlink not found",
                         "schema": {
@@ -486,7 +530,12 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete shortlink by its short code",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete shortlink by its short code (requires authentication)",
                 "produces": [
                     "application/json"
                 ],
@@ -510,6 +559,18 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Response"
                         }
                     },
+                    "401": {
+                        "description": "User not authenticated",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "No permission to delete this link",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
                     "404": {
                         "description": "Shortlink not found",
                         "schema": {
@@ -518,6 +579,131 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Failed to delete shortlink",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieve user profile with image, fullname, email and user-specific stats, with Redis caching",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Get user profile",
+                "responses": {
+                    "200": {
+                        "description": "Returns user profile and stats",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to retrieve profile or stats",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Partially update user profile information (fullname, email, image in Base64 string) with Redis cache invalidation",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Profile"
+                ],
+                "summary": "Update user profile",
+                "parameters": [
+                    {
+                        "description": "JSON body containing fields to update",
+                        "name": "profile",
+                        "in": "body",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "email": {
+                                    "type": "string"
+                                },
+                                "fullname": {
+                                    "type": "string"
+                                },
+                                "image": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Profile updated successfully",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to update profile",
                         "schema": {
                             "$ref": "#/definitions/response.Response"
                         }
@@ -670,17 +856,24 @@ const docTemplate = `{
                 }
             }
         }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
     }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
+	Version:          "1.0",
 	Host:             "",
-	BasePath:         "",
+	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "",
-	Description:      "",
+	Title:            "API Koda Shortlink Documentation",
+	Description:      "Dokumentasi REST API menggunakan Gin dan Swagger",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -1,3 +1,4 @@
+basePath: /
 definitions:
   handler.CreateShortlinkRequest:
     properties:
@@ -69,6 +70,9 @@ definitions:
     type: object
 info:
   contact: {}
+  description: Dokumentasi REST API menggunakan Gin dan Swagger
+  title: API Koda Shortlink Documentation
+  version: "1.0"
 paths:
   /{shortCode}:
     get:
@@ -266,8 +270,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: Retrieve overall shortlink statistics including total links, total
-        visits, average click rate, visits growth, and last 7 days visitor chart
+      description: Retrieve overall shortlink statistics for authenticated user
       produces:
       - application/json
       responses:
@@ -281,16 +284,22 @@ paths:
                   additionalProperties: true
                   type: object
               type: object
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/response.Response'
         "500":
           description: Failed to retrieve dashboard stats
           schema:
             $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
       summary: Get dashboard statistics
       tags:
       - Dashboard
   /api/v1/links:
     get:
-      description: Retrieve a list of all shortlinks
+      description: Retrieve a list of all shortlinks for authenticated user
       produces:
       - application/json
       responses:
@@ -298,17 +307,24 @@ paths:
           description: Returns list of shortlinks
           schema:
             $ref: '#/definitions/response.Response'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/response.Response'
         "500":
           description: Internal server error
           schema:
             $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
       summary: Get all shortlinks
       tags:
       - Shortlinks
     post:
       consumes:
       - application/json
-      description: Generate a shortlink for the provided URL
+      description: Generate a shortlink for the provided URL (works with or without
+        authentication)
       parameters:
       - description: Shortlink creation payload
         in: body
@@ -331,12 +347,14 @@ paths:
           description: Internal server error
           schema:
             $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
       summary: Create a new shortlink
       tags:
       - Shortlinks
   /api/v1/links/{shortCode}:
     delete:
-      description: Delete shortlink by its short code
+      description: Delete shortlink by its short code (requires authentication)
       parameters:
       - description: Short code to delete
         in: path
@@ -350,6 +368,14 @@ paths:
           description: Shortlink deleted successfully
           schema:
             $ref: '#/definitions/response.Response'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: No permission to delete this link
+          schema:
+            $ref: '#/definitions/response.Response'
         "404":
           description: Shortlink not found
           schema:
@@ -358,6 +384,8 @@ paths:
           description: Failed to delete shortlink
           schema:
             $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
       summary: Delete a shortlink
       tags:
       - Shortlinks
@@ -393,7 +421,7 @@ paths:
     put:
       consumes:
       - application/json
-      description: Update original URL or generate/set new short code
+      description: Update original URL or generate/set new short code (requires authentication)
       parameters:
       - description: Existing short code
         in: path
@@ -417,6 +445,14 @@ paths:
           description: Invalid request body
           schema:
             $ref: '#/definitions/response.Response'
+        "401":
+          description: User not authenticated
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: No permission to update this link
+          schema:
+            $ref: '#/definitions/response.Response'
         "404":
           description: Shortlink not found
           schema:
@@ -429,7 +465,90 @@ paths:
           description: Failed to update shortlink
           schema:
             $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
       summary: Update shortlink
       tags:
       - Shortlinks
+  /api/v1/profile:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve user profile with image, fullname, email and user-specific
+        stats, with Redis caching
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Returns user profile and stats
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "500":
+          description: Failed to retrieve profile or stats
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - Profile
+    patch:
+      consumes:
+      - application/json
+      description: Partially update user profile information (fullname, email, image
+        in Base64 string) with Redis cache invalidation
+      parameters:
+      - description: JSON body containing fields to update
+        in: body
+        name: profile
+        schema:
+          properties:
+            email:
+              type: string
+            fullname:
+              type: string
+            image:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "500":
+          description: Failed to update profile
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - Profile
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"
