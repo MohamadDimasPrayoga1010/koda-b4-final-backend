@@ -8,6 +8,10 @@ CREATE TABLE shortlinks (
     updated_at TIMESTAMP DEFAULT now()
 );
 
+ALTER TABLE shortlinks
+ADD COLUMN status VARCHAR(20) DEFAULT 'active';
+
+
 CREATE TABLE shortlink_clicks (
     id SERIAL PRIMARY KEY,
     shortlink_id INT REFERENCES shortlinks(id) ON DELETE CASCADE,
