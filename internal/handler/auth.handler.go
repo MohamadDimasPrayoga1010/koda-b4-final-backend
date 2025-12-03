@@ -38,6 +38,15 @@ func (ac *AuthController) Register(ctx *gin.Context) {
 		return
 	}
 
+	if validationErr := utils.ValidateStruct(req); validationErr != nil {
+		ctx.JSON(400, response.Response{
+			Success: false,
+			Message: "Validation error",
+			Data:    validationErr,
+		})
+		return
+	}
+
 	hashed, err := utils.HashPassword(req.Password)
 	if err != nil {
 		ctx.JSON(500, response.Response{
@@ -93,14 +102,23 @@ func (ac *AuthController) Register(ctx *gin.Context) {
 // @Router /api/v1/auth/login [post]
 func (ac *AuthController) Login(ctx *gin.Context) {
 	var input struct {
-		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required"`
+		Email    string `json:"email" validate:"required,email"`
+		Password string `json:"password" validate:"required"`
 	}
 
 	if err := ctx.ShouldBindJSON(&input); err != nil {
 		ctx.JSON(400, response.Response{
 			Success: false,
 			Message: "Invalid request body",
+		})
+		return
+	}
+
+	if validationErr := utils.ValidateStruct(input); validationErr != nil {
+		ctx.JSON(400, response.Response{
+			Success: false,
+			Message: "Validation error",
+			Data:    validationErr,
 		})
 		return
 	}
@@ -113,7 +131,6 @@ func (ac *AuthController) Login(ctx *gin.Context) {
 		})
 		return
 	}
-
 
 	ok, err := utils.VerifyPassword(input.Password, hashedPassword)
 	if err != nil || !ok {
@@ -142,7 +159,7 @@ func (ac *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
-	expiresAt := time.Now().Add(7 * 24 * time.Hour) 
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
 	err = models.CreateSession(
 		ac.DB,
 		int(user.ID),

@@ -45,6 +45,14 @@ func (sc *ShortlinkController) CreateShortlink(ctx *gin.Context) {
 		return
 	}
 
+	if !utils.ValidateURL(req.OriginalURL) {
+		ctx.JSON(400, gin.H{
+			"success": false,
+			"message": "URL is not valid or unsupported",
+		})
+		return
+	}
+	
 	shortCode := utils.GenerateShortCode(6)
 
 	var uid *int64
