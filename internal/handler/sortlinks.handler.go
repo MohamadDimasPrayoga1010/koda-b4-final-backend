@@ -52,7 +52,7 @@ func (sc *ShortlinkController) CreateShortlink(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	shortCode := utils.GenerateShortCode(6)
 
 	var uid *int64
@@ -85,6 +85,12 @@ func (sc *ShortlinkController) CreateShortlink(ctx *gin.Context) {
 		return
 	}
 
+	if uid != nil {
+		rctx := context.Background()
+		dashboardKey := fmt.Sprintf("analytics:user:%d:7d", *uid)
+		utils.RedisClient.Del(rctx, dashboardKey)
+	}
+
 	ctx.JSON(201, gin.H{
 		"success": true,
 		"message": "Shortlink created successfully",
@@ -92,7 +98,7 @@ func (sc *ShortlinkController) CreateShortlink(ctx *gin.Context) {
 			"id":           newSL.ID,
 			"original_url": newSL.OriginalURL,
 			"short_code":   newSL.ShortCode,
-			"status"	: newSL.Status,
+			"status":       newSL.Status,
 			"created_at":   newSL.CreatedAt,
 		},
 	})
@@ -196,7 +202,6 @@ func (sc *ShortlinkController) GetShortlinkByCode(ctx *gin.Context) {
 		return
 	}
 
-
 	if sl.Status == "inactive" {
 		ctx.JSON(403, response.Response{
 			Success: false,
@@ -204,14 +209,6 @@ func (sc *ShortlinkController) GetShortlinkByCode(ctx *gin.Context) {
 		})
 		return
 	}
-
-
-		fmt.Println("==================")
-	fmt.Println("Short Code:", shortCode)
-	fmt.Println("Status dari DB:", sl.Status)
-	fmt.Println("Status == 'inactive'?", sl.Status == "inactive")
-	fmt.Println("==================")
-	
 
 	if err := models.IncrementRedirectCount(sc.DB, sl.ID); err != nil {
 		ctx.JSON(500, response.Response{
@@ -236,7 +233,6 @@ type UpdateShortlinkRequest struct {
 	ShortCode   string `json:"shortCode"`
 	Status      string `json:"status"`
 }
-
 
 // UpdateShortlink godoc
 // @Summary Update shortlink
@@ -294,7 +290,7 @@ func (sc *ShortlinkController) UpdateShortlink(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	if sl.UserID == nil || *sl.UserID != userID {
 		ctx.JSON(403, response.Response{
 			Success: false,
@@ -307,7 +303,7 @@ func (sc *ShortlinkController) UpdateShortlink(ctx *gin.Context) {
 		sl.OriginalURL = req.OriginalURL
 	}
 
-		if req.Status != "" {
+	if req.Status != "" {
 		sl.Status = req.Status
 	}
 
@@ -343,8 +339,13 @@ func (sc *ShortlinkController) UpdateShortlink(ctx *gin.Context) {
 		return
 	}
 
+	rctx := context.Background()
 	destKey := "link:" + shortCode + ":destination"
-	utils.RedisClient.Del(context.Background(), destKey)
+	dashboardKey := fmt.Sprintf("analytics:user:%d:7d", userID)
+
+	utils.RedisClient.Del(rctx, destKey)
+	utils.RedisClient.Del(rctx, dashboardKey)
+	utils.RedisClient.Del(rctx, "analytics:global:7d")
 
 	ctx.JSON(200, response.Response{
 		Success: true,
@@ -414,6 +415,14 @@ func (sc *ShortlinkController) DeleteShortlink(ctx *gin.Context) {
 		return
 	}
 
+	rctx := context.Background()
+	destKey := "link:" + shortCode + ":destination"
+	dashboardKey := fmt.Sprintf("analytics:user:%d:7d", userID)
+
+	utils.RedisClient.Del(rctx, destKey)
+	utils.RedisClient.Del(rctx, dashboardKey)
+	utils.RedisClient.Del(rctx, "analytics:global:7d")
+
 	ctx.JSON(200, response.Response{
 		Success: true,
 		Message: "Shortlink deleted successfully",
@@ -472,7 +481,7 @@ func (sc *ShortlinkController) GetShortlinksRedis(ctx *gin.Context) {
 		case float64:
 			userID = int64(v)
 		}
-		
+
 		clickKey := fmt.Sprintf("link:%s:clicks:user:%d", shortCode, userID)
 		if err := utils.RedisClient.Incr(rctx, clickKey).Err(); err != nil {
 			fmt.Println("Redis Incr error:", err)
@@ -483,6 +492,12 @@ func (sc *ShortlinkController) GetShortlinksRedis(ctx *gin.Context) {
 
 	go func() {
 		if err := models.IncrementRedirectCount(sc.DB, sl.ID); err == nil {
+			rctx := context.Background()
+			if sl.UserID != nil {
+				dashboardKey := fmt.Sprintf("analytics:user:%d:7d", *sl.UserID)
+				utils.RedisClient.Del(rctx, dashboardKey)
+			}
+
 			utils.RedisClient.Del(rctx, "analytics:global:7d")
 		}
 		_ = models.LogClick(sc.DB, models.ShortlinkClick{
@@ -505,79 +520,76 @@ func (sc *ShortlinkController) GetShortlinksRedis(ctx *gin.Context) {
 // @Failure 500 {object} response.Response "Failed to retrieve dashboard stats"
 // @Router /api/v1/dashboard/stats [get]
 func (sc *ShortlinkController) GetDashboardStats(ctx *gin.Context) {
-userIDValue, exists := ctx.Get("userID")
-if !exists {
-ctx.JSON(401, response.Response{
-Success: false,
-Message: "User not authenticated",
-})
-return
+	userIDValue, exists := ctx.Get("userID")
+	if !exists {
+		ctx.JSON(401, response.Response{
+			Success: false,
+			Message: "User not authenticated",
+		})
+		return
+	}
+
+
+	var userID int64
+	switch v := userIDValue.(type) {
+	case int64:
+		userID = v
+	case int:
+		userID = int64(v)
+	case float64:
+		userID = int64(v)
+	default:
+		ctx.JSON(400, response.Response{
+			Success: false,
+			Message: "Invalid userID type",
+		})
+		return
+	}
+
+	rctx := context.Background()
+	dashboardCacheKey := fmt.Sprintf("analytics:user:%d:7d", userID)
+
+	val, err := utils.RedisClient.Get(rctx, dashboardCacheKey).Result()
+	if err == nil && val != "" {
+		var stats models.DashboardStats
+		if err := json.Unmarshal([]byte(val), &stats); err == nil {
+			ctx.JSON(200, response.Response{
+				Success: true,
+				Message: "Dashboard stats retrieved successfully (from cache)",
+				Data: gin.H{
+					"totalLinks":   stats.TotalLinks,
+					"totalVisits":  stats.TotalVisits,
+					"avgClickRate": stats.AvgClickRate,
+					"visitsGrowth": stats.VisitsGrowth,
+					"last7Days":    stats.Last7Days,
+				},
+			})
+			return
+		}
+	}
+
+	stats, err := models.GetDashboardStatsByUser(sc.DB, int(userID))
+	if err != nil {
+		ctx.JSON(500, response.Response{
+			Success: false,
+			Message: "Failed to retrieve dashboard stats",
+		})
+		return
+	}
+
+	jsonData, _ := json.Marshal(stats)
+	utils.RedisClient.Set(rctx, dashboardCacheKey, jsonData, time.Hour)
+
+	ctx.JSON(200, response.Response{
+		Success: true,
+		Message: "Dashboard stats retrieved successfully",
+		Data: gin.H{
+			"totalLinks":   stats.TotalLinks,
+			"totalVisits":  stats.TotalVisits,
+			"avgClickRate": stats.AvgClickRate,
+			"visitsGrowth": stats.VisitsGrowth,
+			"last7Days":    stats.Last7Days,
+		},
+	})
+
 }
-
-
-var userID int64
-switch v := userIDValue.(type) {
-case int64:
-    userID = v
-case int:
-    userID = int64(v)
-case float64:
-    userID = int64(v)
-default:
-    ctx.JSON(400, response.Response{
-        Success: false,
-        Message: "Invalid userID type",
-    })
-    return
-}
-
-rctx := context.Background()
-dashboardCacheKey := fmt.Sprintf("analytics:user:%d:7d", userID)
-
-val, err := utils.RedisClient.Get(rctx, dashboardCacheKey).Result()
-if err == nil && val != "" {
-    var stats models.DashboardStats
-    if err := json.Unmarshal([]byte(val), &stats); err == nil {
-        ctx.JSON(200, response.Response{
-            Success: true,
-            Message: "Dashboard stats retrieved successfully (from cache)",
-            Data: gin.H{
-                "totalLinks":   stats.TotalLinks,
-                "totalVisits":  stats.TotalVisits,
-                "avgClickRate": stats.AvgClickRate,
-                "visitsGrowth": stats.VisitsGrowth,
-                "last7Days":    stats.Last7Days,
-            },
-        })
-        return
-    }
-}
-
-stats, err := models.GetDashboardStatsByUser(sc.DB, int(userID))
-if err != nil {
-    ctx.JSON(500, response.Response{
-        Success: false,
-        Message: "Failed to retrieve dashboard stats",
-    })
-    return
-}
-
-jsonData, _ := json.Marshal(stats)
-utils.RedisClient.Set(rctx, dashboardCacheKey, jsonData, time.Hour)
-
-ctx.JSON(200, response.Response{
-    Success: true,
-    Message: "Dashboard stats retrieved successfully",
-    Data: gin.H{
-        "totalLinks":   stats.TotalLinks,
-        "totalVisits":  stats.TotalVisits,
-        "avgClickRate": stats.AvgClickRate,
-        "visitsGrowth": stats.VisitsGrowth,
-        "last7Days":    stats.Last7Days,
-    },
-})
-
-
-}
-
-
