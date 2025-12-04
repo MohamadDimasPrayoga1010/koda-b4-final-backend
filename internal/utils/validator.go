@@ -49,7 +49,6 @@ func ValidateURL(u string) bool {
         return false
     }
 
-    // contoh: hanya menerima http/https
     if !strings.HasPrefix(parsed.Scheme, "http") {
         return false
     }
