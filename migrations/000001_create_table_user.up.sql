@@ -21,10 +21,3 @@ CREATE TABLE profile(
     updated_at TIMESTAMP DEFAULT now()
 );
 
-CREATE TABLE forgot_password(
-    id SERIAL PRIMARY KEY,
-    user_id BIGINT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    token VARCHAR(100),
-    expires_at TIMESTAMP DEFAULT now(),
-    created_at TIMESTAMP DEFAULT now()
-);
