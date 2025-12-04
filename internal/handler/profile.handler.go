@@ -198,7 +198,9 @@ func (pc *ProfileController) UpdateProfile(ctx *gin.Context) {
 			return
 		}
 
-		dst := "uploads/" + strconv.Itoa(userID) + ext
+		filename := strconv.Itoa(userID) + ext
+		dst := "uploads/" + filename
+		
 		if err := ctx.SaveUploadedFile(file, dst); err != nil {
 			ctx.JSON(http.StatusInternalServerError, response.Response{
 				Success: false,
@@ -206,7 +208,9 @@ func (pc *ProfileController) UpdateProfile(ctx *gin.Context) {
 			})
 			return
 		}
-		image = &dst
+		
+		imageURL := "/uploads/" + filename
+		image = &imageURL
 	}
 
 	if err := models.UpdateUserProfile(pc.DB, userID, &fullname, &email, image); err != nil {
@@ -233,5 +237,4 @@ func (pc *ProfileController) UpdateProfile(ctx *gin.Context) {
 			"stats":   stats,
 		},
 	})
-
 }
