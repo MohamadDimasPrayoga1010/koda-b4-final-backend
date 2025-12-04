@@ -72,14 +72,6 @@ func (ac *AuthController) Register(ctx *gin.Context) {
 		return
 	}
 
-	if req.Role == "admin" {
-		ctx.JSON(201, response.Response{
-			Success: true,
-			Message: "Admin registered successfully",
-			Data:    user,
-		})
-		return
-	}
 
 	ctx.JSON(201, response.Response{
 		Success: true,
@@ -256,11 +248,11 @@ func (ac *AuthController) RefreshToken(ctx *gin.Context) {
 
 // Logout godoc
 // @Summary Logout user
-// @Description Logout user dengan menghapus refresh token dari server (client harus menghapus token dari storage)
+// @Description Logout user dengan menghapus refresh token di server
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param body body object{refreshToken=string} true "Refresh Token payload"
+// @Param request body object{refreshToken=string} true "Logout request payload"
 // @Success 200 {object} response.Response "Logout successful"
 // @Failure 400 {object} response.Response "Refresh token required"
 // @Failure 500 {object} response.Response "Failed to logout"
@@ -269,7 +261,7 @@ func (ac *AuthController) Logout(ctx *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refreshToken" binding:"required"`
 	}
-	
+
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(400, response.Response{
 			Success: false,
