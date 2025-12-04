@@ -227,76 +227,73 @@ func GetDashboardStats(db *pgxpool.Pool) (DashboardStats, error) {
 }
 
 func GetDashboardStatsByUser(db *pgxpool.Pool, userID int) (DashboardStats, error) {
-var stats DashboardStats
+	var stats DashboardStats
 
+	err := db.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM shortlinks WHERE user_id=$1`, userID,
+	).Scan(&stats.TotalLinks)
+	if err != nil {
+		return stats, err
+	}
 
-err := db.QueryRow(context.Background(),
-    `SELECT COUNT(*) FROM shortlinks WHERE user_id=$1`, userID,
-).Scan(&stats.TotalLinks)
-if err != nil {
-    return stats, err
-}
+	err = db.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM shortlink_clicks 
+		 WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)`,
+		userID,
+	).Scan(&stats.TotalVisits)
+	if err != nil {
+		return stats, err
+	}
 
-err = db.QueryRow(context.Background(),
-    `SELECT COUNT(*) FROM shortlink_clicks 
-     WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)`,
-    userID,
-).Scan(&stats.TotalVisits)
-if err != nil {
-    return stats, err
-}
+	if stats.TotalLinks > 0 {
+		stats.AvgClickRate = float64(stats.TotalVisits) / float64(stats.TotalLinks)
+	}
 
-if stats.TotalLinks > 0 {
-    stats.AvgClickRate = float64(stats.TotalVisits) / float64(stats.TotalLinks)
-}
+	now := time.Now()
+	weekStart := now.AddDate(0, 0, -7)
 
-now := time.Now()
-weekStart := now.AddDate(0, 0, -7)
+	var thisWeek, lastWeek int
+	err = db.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM shortlink_clicks 
+		 WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)
+		 AND clicked_at >= $2`, userID, weekStart,
+	).Scan(&thisWeek)
+	if err != nil {
+		thisWeek = 0
+	}
 
-var thisWeek, lastWeek int
-err = db.QueryRow(context.Background(),
-    `SELECT COUNT(*) FROM shortlink_clicks 
-     WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)
-     AND clicked_at >= $2`, userID, weekStart,
-).Scan(&thisWeek)
-if err != nil {
-    thisWeek = 0
-}
+	lastWeekStart := weekStart.AddDate(0, 0, -7)
+	lastWeekEnd := weekStart
+	err = db.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM shortlink_clicks 
+		 WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)
+		 AND clicked_at >= $2 AND clicked_at < $3`, userID, lastWeekStart, lastWeekEnd,
+	).Scan(&lastWeek)
+	if err != nil {
+		lastWeek = 0
+	}
 
-lastWeekStart := weekStart.AddDate(0, 0, -7)
-lastWeekEnd := weekStart
-err = db.QueryRow(context.Background(),
-    `SELECT COUNT(*) FROM shortlink_clicks 
-     WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)
-     AND clicked_at >= $2 AND clicked_at < $3`, userID, lastWeekStart, lastWeekEnd,
-).Scan(&lastWeek)
-if err != nil {
-    lastWeek = 0
-}
+	if lastWeek > 0 {
+		stats.VisitsGrowth = float64(thisWeek-lastWeek) / float64(lastWeek) * 100
+	} else if thisWeek > 0 {
+		stats.VisitsGrowth = 100
+	}
 
-if lastWeek > 0 {
-    stats.VisitsGrowth = float64(thisWeek-lastWeek) / float64(lastWeek) * 100
-} else if thisWeek > 0 {
-    stats.VisitsGrowth = 100
-}
+	stats.Last7Days = make([]DailyVisit, 7)
+	for i := 0; i < 7; i++ {
+		day := now.AddDate(0, 0, -6+i)  
+		var count int
+		_ = db.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM shortlink_clicks 
+			 WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)
+			 AND DATE(clicked_at) = $2`, userID, day.Format("2006-01-02"),
+		).Scan(&count)
 
-stats.Last7Days = make([]DailyVisit, 7)
-for i := 0; i < 7; i++ {
-    day := weekStart.AddDate(0, 0, i)
-    var count int
-    _ = db.QueryRow(context.Background(),
-        `SELECT COUNT(*) FROM shortlink_clicks 
-         WHERE shortlink_id IN (SELECT id FROM shortlinks WHERE user_id=$1)
-         AND DATE(clicked_at) = $2`, userID, day.Format("2006-01-02"),
-    ).Scan(&count)
+		stats.Last7Days[i] = DailyVisit{
+			Date:   day.Format("Jan 02"), 
+			Visits: count,
+		}
+	}
 
-    stats.Last7Days[i] = DailyVisit{
-        Date:   day.Format("2006-01-02"),
-        Visits: count,
-    }
-}
-
-return stats, nil
-
-
+	return stats, nil
 }
