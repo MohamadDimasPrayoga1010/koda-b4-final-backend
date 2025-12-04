@@ -19,6 +19,7 @@ func InitRouter(pg *pgxpool.Pool) *gin.Engine {
 		})
 	})
 	r.Use(middleware.SetupCORS())
+	r.Use(middleware.Logger())
 	AuthRoutes(r, pg)
 	ShortlinkRoutes(r, pg)
 	UserRoutes(r, pg)
