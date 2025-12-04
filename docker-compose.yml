@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: finalfase-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1
+      POSTGRES_DB: finalfase
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - koda-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: finalfase-redis
+    restart: unless-stopped
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - koda-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: finalfase-backend
+    restart: unless-stopped
+    ports:
+      - "8083:8082"
+    environment:
+      APP_URL: http://localhost:8083/
+      ORIGIN_URL: http://localhost:84
+      APP_SECRET: 526a11a93551f7845b484d3e
+      REFRESH_SECRET: ba0f3dd4ad238b66411b91956ef5b5
+      DATABASE_URL: postgres://postgres:1@postgres:5432/finalfase?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      ALLOW_ORIGIN: http://localhost:84
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - koda-network
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_BASE_URL: http://localhost:8083
+    container_name: koda-frontend
+    restart: unless-stopped
+    ports:
+      - "84:80"
+    depends_on:
+      - backend
+    networks:
+      - koda-network
+
+networks:
+  koda-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
