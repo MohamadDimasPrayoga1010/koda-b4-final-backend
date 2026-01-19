@@ -9,13 +9,14 @@ definitions:
     type: object
   handler.UpdateShortlinkRequest:
     properties:
-      original_url:
+      originalUrl:
         type: string
-      short_code:
-        maxLength: 10
+      shortCode:
+        type: string
+      status:
         type: string
     required:
-    - original_url
+    - originalUrl
     type: object
   models.UserLogin:
     properties:
@@ -154,12 +155,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: Logout user dengan menghapus refresh token dari server (client
-        harus menghapus token dari storage)
+      description: Logout user dengan menghapus refresh token di server
       parameters:
-      - description: Refresh Token payload
+      - description: Logout request payload
         in: body
-        name: body
+        name: request
         required: true
         schema:
           properties:

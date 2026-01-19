@@ -1,0 +1,20 @@
+###
+POST http://localhost:8082/api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MywiZW1haWwiOiJyZWxheGdhY29yQGdtYWlsLmNvbSIsInJvbGUiOiJ1c2VyIiwiaXNzIjoia29kYXNob3J0bGluayIsImV4cCI6MTc2NTI1MzAxOCwiaWF0IjoxNzY0NjQ4MjE4fQ.UGE5KPELYxBPBZ082yboF8RRKynrl56SMB7tctAlluo"
+}
+
+
+
+###
+POST http://localhost:8082/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "relaxgacor@gmail.com",
+  "password": "Yogyoga467"
+}
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MywiZW1haWwiOiJyZWxheGdhY29yQGdtYWlsLmNvbSIsInJvbGUiOiJ1c2VyIiwiaXNzIjoia29kYXNob3J0bGluayIsImV4cCI6MTc2NTI1MzAxOCwiaWF0IjoxNzY0NjQ4MjE4fQ.UGE5KPELYxBPBZ082yboF8RRKynrl56SMB7tctAlluo

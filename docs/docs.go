@@ -92,7 +92,7 @@ const docTemplate = `{
         },
         "/api/v1/auth/logout": {
             "post": {
-                "description": "Logout user dengan menghapus refresh token dari server (client harus menghapus token dari storage)",
+                "description": "Logout user dengan menghapus refresh token di server",
                 "consumes": [
                     "application/json"
                 ],
@@ -105,8 +105,8 @@ const docTemplate = `{
                 "summary": "Logout user",
                 "parameters": [
                     {
-                        "description": "Refresh Token payload",
-                        "name": "body",
+                        "description": "Logout request payload",
+                        "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
@@ -768,15 +768,17 @@ const docTemplate = `{
         "handler.UpdateShortlinkRequest": {
             "type": "object",
             "required": [
-                "original_url"
+                "originalUrl"
             ],
             "properties": {
-                "original_url": {
+                "originalUrl": {
                     "type": "string"
                 },
-                "short_code": {
-                    "type": "string",
-                    "maxLength": 10
+                "shortCode": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },

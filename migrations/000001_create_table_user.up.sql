@@ -11,6 +11,8 @@ CREATE TABLE users(
     updated_at TIMESTAMP DEFAULT now()
 );
 
+
+
 CREATE TABLE profile(
     id SERIAL PRIMARY KEY,
     user_id BIGINT UNIQUE REFERENCES users(id),

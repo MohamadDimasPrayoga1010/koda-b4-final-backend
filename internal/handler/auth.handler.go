@@ -119,7 +119,7 @@ func (ac *AuthController) Login(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(401, response.Response{
 			Success: false,
-			Message: "Email or password incorrect",
+			Message: "Email incorrect",
 		})
 		return
 	}
@@ -128,7 +128,7 @@ func (ac *AuthController) Login(ctx *gin.Context) {
 	if err != nil || !ok {
 		ctx.JSON(401, response.Response{
 			Success: false,
-			Message: "Email or password incorrect",
+			Message: "Password incorrect",
 		})
 		return
 	}
